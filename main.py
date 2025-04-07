@@ -6,7 +6,7 @@ from huggingface_hub import hf_hub_download
 # Download the model from Hugging Face if not already cached
 @st.cache_resource
 def load_model():
-    model_path = hf_hub_download(repo_id="Nikhub7/California-housing-model", filename="california_model.pkl")
+    model_path = hf_hub_download(repo_id="Nikhub7/California-housing-model", filename="my_california_housing_model.pkl")
     return joblib.load(model_path)
 
 model = load_model()
