@@ -4,16 +4,18 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import joblib
+import tempfile
+import requests
+import os
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import rbf_kernel
 
-# -------------------- Custom Code --------------------
-
+# --- Custom Transformers ---
 def column_ratio(X):
     return X[:, [0]] / X[:, [1]]
 
-def ratio_name(transformer, feature_names_in):
+def ratio_name(function_transformer, feature_names_in):
     return ["ratio"]
 
 class ClusterSimilarity(BaseEstimator, TransformerMixin):
@@ -31,45 +33,59 @@ class ClusterSimilarity(BaseEstimator, TransformerMixin):
         return rbf_kernel(X, self.kmeans_.cluster_centers_, gamma=self.gamma)
 
     def get_feature_names_out(self, input_features=None):
-        return [f"cluster_sim_{i}" for i in range(self.n_clusters)]
+        return [f"Cluster {i} similarity" for i in range(self.n_clusters)]
 
-# -------------------- Streamlit UI --------------------
+# --- Load model from external URL ---
+@st.cache_resource
+def load_model_from_url(url):
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception(f"Failed to download model: {response.status_code}")
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as tmp_file:
+        tmp_file.write(response.content)
+        tmp_path = tmp_file.name
 
-st.title("California Housing Price Estimator")
+    model = joblib.load(tmp_path)
+    os.remove(tmp_path)  # clean up
+    return model
+
+# 👇 Replace with your actual raw download link (e.g., from Hugging Face or Google Drive direct link)
+MODEL_URL = "https://huggingface.co/Nikhub7-dotcom/california-housing-model/resolve/main/my_california_housing_model.pkl"
 
 try:
-    model = joblib.load("my_california_housing_model.pkl")
+    model = load_model_from_url(MODEL_URL)
 except Exception as e:
     st.error(f"Error loading model: {e}")
     st.stop()
 
-# Input fields
-median_income = st.number_input("Median Income", min_value=0.0, value=3.5)
-total_rooms = st.number_input("Total Rooms", min_value=1.0, value=1000.0)
-total_bedrooms = st.number_input("Total Bedrooms", min_value=1.0, value=200.0)
-population = st.number_input("Population", min_value=1.0, value=500.0)
-households = st.number_input("Households", min_value=1.0, value=300.0)
-housing_median_age = st.number_input("Housing Median Age", min_value=1.0, value=25.0)
-latitude = st.number_input("Latitude", min_value=32.0, max_value=42.0, value=36.5)
-longitude = st.number_input("Longitude", min_value=-125.0, max_value=-114.0, value=-120.0)
-ocean_proximity = st.selectbox("Ocean Proximity", ["<1H OCEAN", "INLAND", "ISLAND", "NEAR BAY", "NEAR OCEAN"])
+# --- UI ---
+st.title("🏠 California Housing Price Estimator")
+st.markdown("**Note:** Model trained on 1990 California housing data.")
 
-# Prediction
+# Default values for testing
+median_income = st.number_input("Median Income", value=3.5)
+housing_median_age = st.number_input("Housing Median Age", value=30)
+total_rooms = st.number_input("Total Rooms", value=2000)
+total_bedrooms = st.number_input("Total Bedrooms", value=400)
+population = st.number_input("Population", value=800)
+households = st.number_input("Households", value=300)
+latitude = st.number_input("Latitude", value=34.0)
+longitude = st.number_input("Longitude", value=-118.0)
+ocean_proximity = st.selectbox("Ocean Proximity", ["<1H OCEAN", "INLAND", "NEAR OCEAN", "NEAR BAY", "ISLAND"])
+
 if st.button("Estimate Price"):
-    input_data = pd.DataFrame([{
+    input_df = pd.DataFrame([{
         "median_income": median_income,
+        "housing_median_age": housing_median_age,
         "total_rooms": total_rooms,
         "total_bedrooms": total_bedrooms,
         "population": population,
         "households": households,
-        "housing_median_age": housing_median_age,
         "latitude": latitude,
         "longitude": longitude,
         "ocean_proximity": ocean_proximity
     }])
-
-    try:
-        prediction = model.predict(input_data)
-        st.success(f"Estimated Median House Value: ${prediction[0] * 100000:.2f}")
-    except Exception as e:
-        st.error(f"Prediction failed: {e}")
+    
+    prediction = model.predict(input_df)
+    st.success(f"💰 Estimated Median House Value: ${prediction[0] * 100000:.2f}")
