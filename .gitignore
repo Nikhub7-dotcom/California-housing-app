@@ -1,2 +1,5 @@
 chapter2env/
 __pycache__/
+*.pkl
+.ipynb_checkpoint/
+
